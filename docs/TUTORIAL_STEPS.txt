@@ -1,0 +1,125 @@
+Project Tutorial — Step-by-step implementation
+
+This document lists, step-by-step, what was implemented to make the Kanban app available in the browser, including AI chat support and Docker deployment.
+
+1) Project overview
+- Added a Python FastAPI backend that serves the static frontend, persists board state in SQLite, exposes board APIs, and provides an AI chat endpoint.
+- Updated the Next.js frontend so it loads/saves the board via the backend and added a chat sidebar that calls the backend AI route.
+- Containerized the app (multi-stage Dockerfile + docker-compose) and added start/stop scripts.
+- Wired OpenRouter (model openai/gpt-oss-120b) via `OPENROUTER_API_KEY` in `.env` and added a local fallback when external AI is unreachable.
+
+2) Files added/changed
+- Backend:
+  - `backend/main.py` — FastAPI app, DB logic, board and AI API routes.
+  - `backend/requirements.txt` — Python dependencies (fastapi, uvicorn, httpx, python-dotenv, aiofiles, pydantic).
+- Frontend:
+  - `frontend/src/components/KanbanBoard.tsx` — board loads/saves via API, integrated ChatSidebar.
+  - `frontend/src/components/ChatSidebar.tsx` — new chat UI component.
+  - `frontend/next.config.ts` — `output: "export"` for static generation.
+  - `frontend/package.json` — build scripts.
+- Docker & scripts:
+  - `Dockerfile` — multi-stage: build frontend, bundle backend + static out.
+  - `docker-compose.yml` — service `app`, exposes port `8000`, mounts `./backend/data`.
+  - `.dockerignore` — excludes node_modules, .next, out.
+  - `scripts/start.ps1`, `scripts/stop.ps1`, `scripts/start.sh`, `scripts/stop.sh`.
+- Docs:
+  - `frontend/AGENTS.md`, `docs/RUN_INSTRUCTIONS.md` (run steps), `docs/TUTORIAL_STEPS.txt` (this file).
+
+3) Backend implementation details
+- Endpoints created:
+  - `GET /api/ping` — health
+  - `GET /api/board` — returns persisted board JSON
+  - `PUT /api/board` — saves board JSON
+  - `POST /api/ai` — accepts `{ "question": "..." }`, returns `{ "response": "..." }`
+  - `GET /health`
+- Persistence: SQLite DB at `backend/data/kanban.db`, created and seeded with initial board if missing.
+- AI integration:
+  - Uses `python-dotenv` to load `OPENROUTER_API_KEY` from project `.env`.
+  - Calls OpenRouter endpoint `https://openrouter.ai/v1/chat/completions` with model `openai/gpt-oss-120b`.
+  - Implements robust response parsing (`extract_openrouter_response`) that handles multiple OpenRouter response shapes.
+  - If external AI call fails, responds with a local fallback (`local_ai_answer`) that derives simple card/column answers from the stored board so the UI still gets helpful text.
+
+4) Frontend implementation details
+- `KanbanBoard`:
+  - On mount, fetches board data from `GET /api/board`.
+  - After any change (move, add, delete, rename), calls `PUT /api/board` to persist the new board.
+  - Integrates DnD via `@dnd-kit` (existing code retained).
+- Chat/sidebar:
+  - `ChatSidebar` posts user questions to `POST /api/ai` and displays responses.
+  - UI shows loading/error messages appropriately.
+
+5) Docker & build flow
+- Multi-stage `Dockerfile`:
+  - Stage 1: Node image builds the Next.js frontend with `next build` (configured with `output: "export"`) producing `out/`.
+  - Stage 2: Python image installs `backend/requirements.txt` and copies `backend` and `frontend/out` into the image, runs `uvicorn main:app`.
+- `docker-compose.yml`:
+  - Starts service `app`, publishes `8000:8000`, mounts `./backend/data` for persistence and loads `.env`.
+
+6) How to run locally (copyable commands)
+Prerequisites:
+- Docker installed and running.
+- `.env` in project root containing a valid `OPENROUTER_API_KEY`.
+
+Start (Windows PowerShell):
+```
+cd C:\Users\Himaja\pm\scripts
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
+Start (macOS/Linux):
+```
+cd /path/to/pm/scripts
+./start.sh
+```
+Alternative direct Docker:
+```
+# from project root
+docker compose up -d --build
+```
+
+Stop (Windows):
+```
+powershell -ExecutionPolicy Bypass -File .\stop.ps1
+```
+Stop (macOS/Linux):
+```
+./stop.sh
+```
+
+7) How to test and verify
+- Open: http://localhost:8000 — the Kanban board should load.
+- Board operations (drag, add, delete, rename) should persist across refreshes.
+- Ask the AI in the sidebar: e.g., "Tell me about the Done cards".
+- If OpenRouter is reachable, you will see model responses. If not, a local fallback answer will be returned.
+
+Quick curl test for AI endpoint:
+```
+curl -s -X POST http://localhost:8000/api/ai -H "Content-Type: application/json" -d '{"question":"Tell me about the Done cards"}'
+```
+
+8) Debugging AI connectivity
+- Confirm `.env` contains the key and is not committed to source control.
+- In the container, verify the environment variable:
+```
+docker compose exec app env | findstr OPENROUTER_API_KEY
+```
+- View backend logs:
+```
+docker compose logs app --tail 200
+```
+- If external OpenRouter fails, backend returns local fallback text automatically.
+
+9) Security & next steps
+- Do not commit `.env` to Git. Use a secrets manager for production.
+- Add authentication to protect the board in future iterations.
+- Add unit and integration tests for the AI route, including simulated OpenRouter failures.
+
+10) Summary of why AI might have been "unavailable" earlier
+- The backend may not have had the correct `OPENROUTER_API_KEY` in the container environment.
+- The OpenRouter request or response shape may have differed; I added robust parsing and a local fallback so the UI remains functional even when external AI calls fail.
+
+If you want, I can now:
+- Rebuild and start the containers and stream the backend logs to verify OpenRouter calls succeed, or
+- Show the exact backend logs now and diagnose the current runtime error.
+
+---
+File created at: docs/TUTORIAL_STEPS.txt

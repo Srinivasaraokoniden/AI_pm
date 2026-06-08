@@ -6,7 +6,26 @@ Enrich this document to plan out each of these parts in detail, with substeps li
 
 Part 2: Scaffolding
 
-Set up the Docker infrastructure, the backend in backend/ with FastAPI, and write the start and stop scripts in the scripts/ directory. This should serve example static HTML to confirm that a 'hello world' example works running locally and also make an API call.
+- Set up Docker infrastructure for the backend, frontend build, and local runtime.
+- Create a `backend/` FastAPI app.
+- Add start and stop scripts in `scripts/` for Windows and macOS/Linux.
+- Add `Dockerfile`(s) and a `docker-compose.yml` or equivalent local compose setup.
+- Ensure the backend serves static assets from the built frontend output.
+- Add a sample backend route such as `/api/ping` and a simple root page or served static app.
+- Validate the containerized app by building images and running locally with Docker.
+
+Success criteria
+
+- The stack starts locally via Docker.
+- `GET /` returns the served frontend shell from the container.
+- `GET /api/ping` returns a known JSON payload from the container.
+- The Docker setup builds both backend and frontend and runs as expected.
+
+Deliverables
+
+- `Dockerfile` for the backend and/or frontend as required.
+- `docker-compose.yml` to start the full local stack.
+- Start/stop scripts that invoke the Docker deployment.
 
 Part 3: Add in Frontend
 
